@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Web Mapping Open Data - GeoRodeo 2016</title>
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v1.0.0-rc.1/leaflet.css" />
+<link rel="stylesheet" href="https://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/3.15/themes/css/cartodb.css" />
+<script src="https://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/3.15/cartodb.js"></script>
+<script src="http://cdn.leafletjs.com/leaflet/v1.0.0-rc.1/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/leaflet.esri/2.0.0-beta.8/esri-leaflet.js" type="text/javascript"></script>
+<script src="./js/turf.count.min.js" type="text/javascript"></script>
+<script src="https://d3js.org/d3.v4.0.0-alpha.40.min.js"></script>
+  
+<style>
+
+    body {
+        padding: 0;
+        margin: 0;
+    }
+    
+    #map {
+        width: 100%;
+        height: 200px;
+        /* overridden with setSize() */
+    }
+
+</style>
+
+<div id="map"></div>
+
+<script>
+
+    function main(){
+        
+        map = new L.Map("map", {center : [30.28, -97.735], zoom : 11, minZoom : 1, maxZoom : 20});      // make a map
+        
+        var Stamen_TonerLite = L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.{ext}', {
+            attribution : 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            subdomains : 'abcd',
+            minZoom : 0,
+            maxZoom : 20,
+            ext : 'png'
+        }).addTo(map);
+        
+        var districtStyle = {  //  style objects
+            "color" : "white",
+            "fillColor" : "black",
+            "weight" : 2
+        };
+
+       var travis_county = L.esri.featureLayer({  //  Esri feature layer
+            url : 'http://services.arcgis.com/0L95CJ0VTaxqcmED/ArcGIS/rest/services/Travis_County/FeatureServer/0',
+            style : districtStyle
+        })
+        
+            .addTo(map);
+
+        var council_districts = new L.geoJson(false, {"style" : districtStyle, onEachFeature : onEachFeatureDistricts});
+
+        $.getJSON("./data/atx_council_districts_reduced.geo.json", function(districts) {
+
+            council_districts.addData(districts)
+
+            //  .addTo(map);
+
+        });
+
+        var lost_in_drain = new L.geoJson();  //  311 data from City of Austin Open Data Portal (using jquery AJAX)
+                      
+        var tracts = L.geoJson(false, {style : styleTracts, onEachFeature : onEachFeatureTracts}) //  CartoDB geojson
+
+        //  .addTo(map)
+
+        $.getJSON("https://data.austintexas.gov/resource/5h38-fd8d.geojson?sr_type_code=ZZANIMAL&$select=sr_created_date,sr_location_lat_long",function(drain_geojson){
+            
+            lost_in_drain.addData(drain_geojson)
+
+             // .addTo(map);
+            
+            var sql = new cartodb.SQL({ user : 'spatialaustin', format : 'geojson' });
+
+            sql.execute("SELECT * FROM travis_county_texas_us_census_tracts_and_population_2010").done(function(tract_geojson) {
+
+                tracts.addData(tract_geojson)
+
+                 // .addTo(map);
+
+                var tract_counted = turf.count(tract_geojson, drain_geojson, 'service_request_count')
+
+                tracts.clearLayers().addData(tract_counted)
+
+            });
+
+        })
+
+        var baseLayers = {
+            "Stamen Toner (Lite)" : Stamen_TonerLite
+        };
+
+        var overlays = {
+            "Council Districts" : council_districts,
+            "Census Tracts" : tracts,
+            "Item Lost in Storm Drain" : lost_in_drain
+        };  //  did not add travis_county due to some funky behavior w/ Esri feature layer
+
+        layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
+        
+            .addTo(map);     
+
+        function onEachFeatureDistricts(feature, layer) {  //  bind pop-up
+            if (feature.properties.council_di) {
+                var popUpContent = "District " + feature.properties.council_di;
+                layer.bindPopup(popUpContent);
+            }
+        }
+        
+        function onEachFeatureTracts(feature, layer) {  //  bind pop-up
+            if (feature.properties.service_request_count) {
+                var pop2010 = feature.properties.pop2010;
+                var totalServiceRequests =  feature.properties.service_request_count;
+                var pctRequests = totalServiceRequests / pop2010;
+                var popUpContent = formatPct(pctRequests) + " of people lost something in the storm drain."
+                layer.bindPopup(popUpContent);
+            }
+        }
+
+    }
+
+    // D3 just for the scale
+    var formatPct = d3.format(".3%");
+
+    var blueRamp6 = ['#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b']; //  source: colorbrewer2.org
+
+    var colorScale = d3.scaleQuantize().domain([.0001,.002]).range(blueRamp6);  //
+
+    function styleTracts(feature) {
+        return {
+            fillColor : getColor(feature),
+            weight : 1,
+            opacity : 1,
+            color : 'white',
+            fillOpacity : 0.5
+        };
+    }
+
+    function getColor(feature){
+        if (feature.properties.service_request_count >= 0) {
+            var pop2010 = feature.properties.pop2010;
+            var totalServiceRequests =  feature.properties.service_request_count;
+            var pctRequests = totalServiceRequests / pop2010;
+            return colorScale(pctRequests);     
+        } else { return "gray" };
+    }
+
+    // map window sizing 
+    window.addEventListener('resize', function(){
+            var h = window.innerHeight; 
+            document.getElementById('map').style.height = h + "px"
+    }, true);
+        
+    window.onload = function() {
+        setSize();
+        main();
+    };
+    
+    function setSize(){
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        document.getElementById('map').style.height = h + "px";
+    }
+    
+</script>
+

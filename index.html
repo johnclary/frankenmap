@@ -32,7 +32,7 @@
     
     function main(){
         
-        var map = new L.Map("map", {center : [30.28, -97.735], zoom : 11, minZoom : 1, maxZoom : 20});      // make a map
+        map = new L.Map("map", {center : [30.28, -97.735], zoom : 11, minZoom : 1, maxZoom : 20});      // make a map
         
         var Stamen_TonerLite = L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.{ext}', {
             attribution : 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -104,7 +104,7 @@
             "Item Lost in Storm Drain" : lost_in_drain
         };  //  did not add travis_county due to some funky behavior w/ Esri feature layer
 
-        var layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
+        layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
         
             .addTo(map);     
 

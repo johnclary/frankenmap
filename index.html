@@ -29,7 +29,9 @@
 <script>
 
     //  map data from City of Austin, Texas and the US Census Bureau 
-    
+    //  "District  == 10 || District == 17 || District == 21 || District == 25 || District == 27 || District == 31 || District == 35"
+    var nice;
+
     function main(){
         
         var map = new L.Map("map", {center : [30.28, -97.735], zoom : 11, minZoom : 1, maxZoom : 20});      // make a map
@@ -42,116 +44,79 @@
             ext : 'png'
         }).addTo(map);
         
+
         var districtStyle = {  //  style objects
             "color" : "white",
             "fillColor" : "black",
             "weight" : 2
         };
 
-       var travis_county = L.esri.featureLayer({  //  Esri feature layer
-            url : 'http://services.arcgis.com/0L95CJ0VTaxqcmED/ArcGIS/rest/services/Travis_County/FeatureServer/0',
-            style : districtStyle
-        })
-        
-            .addTo(map);
 
-        var council_districts = new L.geoJson(false, {"style" : districtStyle, onEachFeature : onEachFeatureDistricts});
 
-        $.getJSON("./data/atx_council_districts_reduced.geo.json", function(districts) {
+        d3.json("./data/atx_tracts_latino_wgs84.json", function(data) {
 
-            council_districts.addData(districts)
-
-            //  .addTo(map);
-            
+            nice = data;
 
         });
 
-        var lost_in_drain = new L.geoJson();  //  311 data from City of Austin Open Data Portal (using jquery AJAX)
-                      
-        var tracts = L.geoJson(false, {style : styleTracts, onEachFeature : onEachFeatureTracts}) //  CartoDB geojson
 
-        //  .addTo(map)
+        var tx_tracts = new L.geoJson(false, {style : styleTracts});
 
-        $.getJSON("https://data.austintexas.gov/resource/5h38-fd8d.geojson?sr_type_code=ZZANIMAL&$select=sr_created_date,sr_location_lat_long",function(drain_geojson){
-            
-            lost_in_drain.addData(drain_geojson)
 
-             // .addTo(map);
-            
-            var sql = new cartodb.SQL({ user : 'spatialaustin', format : 'geojson' });
+        $.getJSON("./data/atx_tracts_latino_wgs84.json", function(tracts) {
 
-            sql.execute("SELECT * FROM travis_county_texas_us_census_tracts_and_population_2010").done(function(tract_geojson) {
+            tx_tracts.addData(tracts)
 
-                tracts.addData(tract_geojson)
+            .addTo(map); 
 
-                 // .addTo(map);
+        });
 
-                var tract_counted = turf.count(tract_geojson, drain_geojson, 'service_request_count')
 
-                tracts.clearLayers().addData(tract_counted)
+        var house_districts = new L.geoJson(false);
 
-            });
 
-        })
+        $.getJSON("./data/tx_congress_planc235.json", function(districts) {
+
+            house_districts.addData(districts)
+
+            .addTo(map); 
+
+        });
+
 
         var baseLayers = {
             "Stamen Toner (Lite)" : Stamen_TonerLite
         };
 
         var overlays = {
-            "Council Districts" : council_districts,
-            "Census Tracts" : tracts,
-            "Item Lost in Storm Drain" : lost_in_drain
+            "TX Tracts" : tx_tracts,
+            "House Districts" : house_districts
         };  //  did not add travis_county due to some funky behavior w/ Esri feature layer
 
         var layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
         
             .addTo(map);     
 
-        function onEachFeatureDistricts(feature, layer) {  //  bind pop-up
-            if (feature.properties.council_di) {
-                var popUpContent = "District " + feature.properties.council_di;
-                layer.bindPopup(popUpContent);
-            }
-        }
+
+        var blueRamp6 = ['#67001f','#b2182b','#d6604d','#f4a582','#fddbc7','#ffffff','#e0e0e0','#bababa','#878787','#4d4d4d','#1a1a1a']; //  source: colorbrewer2.org
         
-        function onEachFeatureTracts(feature, layer) {  //  bind pop-up
-            if (feature.properties.service_request_count) {
-                var pop2010 = feature.properties.pop2010;
-                var totalServiceRequests =  feature.properties.service_request_count;
-                var pctRequests = totalServiceRequests / pop2010;
-                var popUpContent = formatPct(pctRequests) + " of people lost something in the storm drain."
-                layer.bindPopup(popUpContent);
-            }
+        blueRamp6.reverse();
+
+        var colorScale = d3.scaleQuantize().domain([0,.97]).range(blueRamp6);  //
+
+        function styleTracts(feature) {
+            return {
+                fillColor : colorScale(feature.properties.pct_latino),
+                weight : 0,
+                opacity : 1,
+                color : 'white',
+                fillOpacity : 0.8
+            };
         }
-
+    
     }
 
-    // D3 just for the scale
-    var formatPct = d3.format(".3%");
-
-    var blueRamp6 = ['#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b']; //  source: colorbrewer2.org
-
-    var colorScale = d3.scaleQuantize().domain([.0001,.002]).range(blueRamp6);  //
-
-    function styleTracts(feature) {
-        return {
-            fillColor : getColor(feature),
-            weight : 1,
-            opacity : 1,
-            color : 'white',
-            fillOpacity : 0.5
-        };
-    }
-
-    function getColor(feature){
-        if (feature.properties.service_request_count >= 0) {
-            var pop2010 = feature.properties.pop2010;
-            var totalServiceRequests =  feature.properties.service_request_count;
-            var pctRequests = totalServiceRequests / pop2010;
-            return colorScale(pctRequests);     
-        } else { return "gray" };
-    }
+    
 
     // map window sizing 
     window.addEventListener('resize', function(){

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Web Mapping Open Data - GeoRodeo 2016</title>
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v1.0.0-rc.1/leaflet.css" />
+<script src="https://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/3.15/cartodb.js"></script>
+<script src="http://cdn.leafletjs.com/leaflet/v1.0.0-rc.1/leaflet.js"></script>
+<script src="https://d3js.org/d3.v4.0.0-alpha.40.min.js"></script>
+  
+<style>
+
+    body {
+        padding: 0;
+        margin: 0;
+    }
+    
+    #map {
+        width: 100%;
+        height: 200px;
+        /* overridden with setSize() */
+    }
+
+</style>
+
+<div id="map"></div>
+
+<script>
+
+    //  map data from State of Texas, City of Austin, and the US Census Bureau 
+    //  tiles from Stamen and OpenStreetMap
+
+    function main(){
+
+        //  initialize map
+        var map = new L.Map("map", 
+            {
+                center : [30.28, -97.735],
+                zoom : 6, 
+                minZoom : 5,
+                maxZoom : 20
+            });
+        
+
+        //  more providers! http://leaflet-extras.github.io/leaflet-providers/preview/
+        var Stamen_TonerLite = L.tileLayer('http://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.{ext}', {
+            attribution : 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            subdomains : 'abcd',
+            minZoom : 0,
+            maxZoom : 20,
+            ext : 'png'
+        }).addTo(map);
+
+
+        //  variables highlight features logic
+        var district_highlighted = 0;
+        var district_clicked = 0;
+
+
+
+        //  central TX census tracts
+        var tx_tracts = new L.geoJson(false, { style : styleTracts});
+
+        $.getJSON("./data/atx_tracts_latino_wgs84.json", function(tracts) {
+
+            tx_tracts.addData(tracts)
+
+            //  .addTo(map);
+
+        });
+
+
+        //  us congressional districts
+        var house_districts = new L.geoJson(false, {onEachFeature : onEachFeatureDistricts} )
+
+            .on('click', function(e) {
+                
+                district_clicked = e.layer.feature.properties.District;
+
+                if (district_clicked == district_highlighted) {
+                    house_districts.setStyle(districtStyle)
+                    district_highlighted = 0;
+                    map.closePopup();
+
+                } else {
+                    house_districts.setStyle(districtStyle)
+                    house_districts.setStyle(shadyStyle)
+                    e.layer.setStyle(districtStyleHighlighted);
+                    e.layer.bringToFront()
+                    district_highlighted = district_clicked;
+
+                }
+            });
+
+
+
+        $.getJSON("./data/placn235_simp_wgs84.geo.json", function(districts) {
+
+            house_districts.addData(districts).setStyle(districtStyle)
+
+                .addTo(map); 
+
+        })
+
+
+        //  ramp courtesy of Jan Brewer / colorbrewer2.org
+        //  try another one!  http://colorbrewer2.org/#type=diverging&scheme=RdGy&n=9
+
+        var colorRamp = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'];
+        
+        colorRamp.reverse();  // its a style thing
+
+        var colorScale = d3.scaleQuantize().domain([0,.97]).range(colorRamp);
+
+
+        // district pop-up
+        function onEachFeatureDistricts(feature, layer) {            
+            if (feature.properties.District) {
+                var popUpContent = "House District " + feature.properties.District;
+                //  layer.bindPopup(popUpContent);
+            }
+
+        }
+
+        //  layer control stuff
+        var baseLayers = {
+            "Stamen Basemap" : Stamen_TonerLite
+        };
+
+        var overlays = {
+            "TX Tracts" : tx_tracts,
+            "House Districts" : house_districts
+        };
+
+        var layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
+        
+            .addTo(map);     
+
+        map.on('overlayadd', function(thing) {
+            house_districts.bringToFront();
+        });
+
+
+        //  style functions
+        function styleTracts(feature) {
+            return {
+                fillColor : colorScale(feature.properties.pct_latino),
+                weight : 1,
+                opacity : 0.5,
+                color : colorScale(feature.properties.pct_latino),
+                fillOpacity : 0.8
+            };
+        }
+
+        var districtStyle = {
+            fillColor : 'black',
+            weight : 1,
+            opacity : 1,
+            color : 'gray',
+            fillOpacity : .8
+        }
+
+        var shadyStyle = {
+            fillColor : 'black',
+            weight : 2,
+            opacity : 1,
+            color : 'gray',
+            fillOpacity : .8
+        }
+
+        var districtStyleHighlighted = {
+            fillColor : 'white',
+            weight : 3,
+            opacity : 1,
+            color : 'black',
+            fillOpacity : 0  
+        }
+    
+    }
+
+    // map window sizing 
+    window.addEventListener('resize', function(){
+            var h = window.innerHeight; 
+            document.getElementById('map').style.height = h + "px"
+    }, true);
+        
+    window.onload = function() {
+        setSize();
+        main();
+    };
+    
+    function setSize(){
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        document.getElementById('map').style.height = h + "px";
+    }
+    
+</script>
+

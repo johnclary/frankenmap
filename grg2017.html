@@ -63,7 +63,7 @@
 
             tx_tracts.addData(tracts)
 
-            //  .addTo(map);
+              //  .addTo(map).bringToBack();
 
         });
 
@@ -96,7 +96,7 @@
 
             house_districts.addData(districts).setStyle(districtStyle)
 
-                //  .addTo(map); 
+                 //  .addTo(map); 
 
         })
 
@@ -132,12 +132,15 @@
 
         var layerControl = L.control.layers(baseLayers, overlays)  //  Layer Control
         
-            //  .addTo(map);     
+              //  .addTo(map);     
 
         map.on('overlayadd', function(thing) {
             house_districts.bringToFront();
-        });
+        })
 
+        map.on('layeradd', function(thing) {
+            house_districts.bringToFront();
+        })
 
         //  style functions
         function styleTracts(feature) {
